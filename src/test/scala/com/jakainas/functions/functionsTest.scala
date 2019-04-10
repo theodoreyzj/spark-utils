@@ -42,6 +42,23 @@ class functionsTest extends SparkTest {
     an [NullPointerException] should be thrownBy plusDays(null, 5)
   }
 
+  test("dateCols: numeric input"){
+    Seq(("2019", "04", "10")).toDF("year", "month", "day").select(dateCols('year, 'month, 'day))
+      .as[(String)].collect  should contain theSameElementsAs Array("2019-04-10")
+
+    Seq((2019, 4, 10)).toDF("year", "month", "day").select(dateCols('year, 'month, 'day))
+      .as[String].collect  should contain theSameElementsAs Array("2019-04-10")
+  }
+
+  test("dateCols: text input"){
+    Seq(("2019", "Four", "Ten")).toDF("year", "month", "day").select(dateCols('year, 'month, 'day))
+      .as[String].collect  should contain theSameElementsAs Array(null)
+  }
+
+  test("dateCols: null input"){
+    Seq(("2019", "04", null)).toDF("year", "month", "day").select(dateCols('year, 'month, 'day))
+      .as[String].collect  should contain theSameElementsAs Array(null)
+  }
 }
 
 object functionsTest {
