@@ -3,11 +3,13 @@ package com.jakainas
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
+import com.jakainas.table.{Table, TableConfig}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{Column, Dataset, Encoder}
+import org.apache.spark.sql.{Column, Dataset, Encoder, SparkSession}
+import org.apache.spark.sql._
 
 import scala.reflect.runtime.universe._
 
@@ -40,7 +42,7 @@ package object functions {
     LocalDate.parse(date, DateTimeFormatter.ISO_DATE).minusDays(-numDays).toString
   }
 
-  /**
+    /**
     * Generate a string Date column by combining year, month, and day columns.
     * If one or more column is null, the result Date will be null.
     * @param year - the year column
@@ -51,8 +53,8 @@ package object functions {
   def to_date_str(year: Column, month: Column, day: Column): Column = {
     date_format(concat(year, lit("-"), month, lit("-"), day), "yyyy-MM-dd")
   }
-
-  implicit class DatasetFunctions[T](val ds: Dataset[T]) {
+  
+  implicit class DatasetFunctions[T](val ds: Dataset[T]) extends AnyVal {
     /**
       * Remove duplicate rows using some column criteria for grouping and ordering
       * @param partCols - How to group rows.  Only 1 row from each group will be in the result
@@ -76,5 +78,42 @@ package object functions {
         deduped.asInstanceOf[Dataset[T]]
       else deduped.as[T](conv)
     }
+
+    /**
+      * Add multiple new columns to the current DataFrame
+      * (i.e., `withColumn` for a sequence of (String, Column) Tuples).
+      *
+      * @param newColTuples - a list of name-value Tuples2 (colName: String, colVal: Column).
+      * @return - The DataFrame with new columns added.
+      */
+    def addColumns(newColTuples: (String, Column)*): DataFrame = newColTuples.foldLeft(ds.toDF()) {
+      // From left to right, for each new (colName, colVal) Tuple add it to the current DataFrame
+      case (newDF, (colName, colVal)) => newDF.withColumn(colName, colVal)
+    }
+
+    /**
+      * Rename multiple new columns of the current DataFrame
+      * (i.e., `withColumnRenamed` for a sequence of (String, String) Tuples).
+      *
+      * @param renameColTuples - a list of current, new column name Tuples2 (currColName: String, newColName: String).
+      * @return - The DataFrame with mulitple renamed columns.
+      */
+    def renameColumns(renameColTuples: (String, String)*): DataFrame = renameColTuples.foldLeft(ds.toDF()) {
+      // From left to right, for each new (currColName, newColName) Tuple apply withColumnRenamed
+      case (newDF, (currColName, newColName)) => newDF.withColumnRenamed(currColName, newColName)
+    }
+
+    def save()(implicit table: Table[T]): Unit = {
+      ds.write.partitionBy(table.partitioning:_*).parquet(table.fullPath)
+    }
   }
+
+  implicit class SparkFunctions(val spark: SparkSession) extends AnyVal {
+    def load[T : Encoder : Table]: Dataset[T] = {
+      val table = implicitly[Table[T]]
+
+      spark.read.option("basePath", table.basePath).parquet(table.fullPath).as[T]
+    }
+  }
+
 }
