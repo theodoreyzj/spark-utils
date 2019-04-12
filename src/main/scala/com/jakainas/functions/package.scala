@@ -46,9 +46,9 @@ package object functions {
     * @param year - the year column
     * @param month - the month column
     * @param day - the day column
-    * @return
+    * @return a string column consist of the combination of year, month, and day into date
     */
-  def dateCols(year: Column, month: Column, day: Column): Column = {
+  def to_date_str(year: Column, month: Column, day: Column): Column = {
     date_format(concat(year, lit("-"), month, lit("-"), day), "yyyy-MM-dd")
   }
 
